@@ -278,11 +278,7 @@ def order(product_id):
 
         estimated_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
 
-        if not product:
-            conn.close()
-            return "Product not found"
-
-        available_stock = product[0]
+        available_stock = stock
         if available_stock < quantity:
             conn.close()
             return "Insufficient stock"
