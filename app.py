@@ -244,16 +244,39 @@ def order(product_id):
     if 'username' not in session or session['role'] != "Customer":
         return redirect(url_for('login'))
 
-    if quantity <= 0:
-            return "Quantity must be greater than zero"
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, stock FROM products WHERE id=?", (product_id,))
+    product = cursor.fetchone()
+
+    if not product:
+        conn.close()
+        return redirect(url_for('products'))
+
+    product_name, stock = product
+    error = None
 
     if request.method == 'POST':
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+
         quantity = int(request.form['quantity'])
+        if quantity <= 0:
+            conn.close()
+            return "Quantity must be greater than zero"
+
+        if quantity > stock:
+            error = f"Only {stock} item(s) available for {product_name}."
+            conn.close()
+            return render_template(
+                "place_order.html",
+                product_id=product_id,
+                product_name=product_name,
+                stock=stock,
+                error=error
+            )
 
         estimated_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
-
-        cursor.execute("SELECT stock FROM products WHERE id=?", (product_id,))
-        product = cursor.fetchone()
 
         if not product:
             conn.close()
@@ -267,8 +290,6 @@ def order(product_id):
         updated_stock = available_stock - quantity
         cursor.execute("UPDATE products SET stock=? WHERE id=?", (updated_stock, product_id))
 
-        conn = sqlite3.connect("database.db")
-        cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO orders (username, product_id, quantity, status, estimated_delivery, payment_status)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -279,7 +300,14 @@ def order(product_id):
 
         return redirect(url_for('products'))
 
-    return render_template("place_order.html", product_id=product_id)
+    conn.close()
+    return render_template(
+        "place_order.html",
+        product_id=product_id,
+        product_name=product_name,
+        stock=stock,
+        error=error
+    )
 
 @app.route('/orders')
 def view_orders():
