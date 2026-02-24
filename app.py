@@ -46,9 +46,16 @@ def init_db():
         quantity INTEGER,
         status TEXT,
         estimated_delivery TEXT,
-        payment_status TEXT
+        payment_status TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    cursor.execute("PRAGMA table_info(orders)")
+    order_columns = [column[1] for column in cursor.fetchall()]
+    if "created_at" not in order_columns:
+        cursor.execute("ALTER TABLE orders ADD COLUMN created_at TEXT")
+        cursor.execute("UPDATE orders SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
 
     cursor.execute("SELECT * FROM users WHERE username='admin'")
     if not cursor.fetchone():
@@ -114,6 +121,44 @@ def dashboard():
     cursor.execute("SELECT SUM(stock) FROM products")
     total_stock = cursor.fetchone()[0] or 0
 
+    cursor.execute("SELECT COUNT(*) FROM orders WHERE status='Delivered'")
+    total_delivered = cursor.fetchone()[0]
+
+    cursor.execute("SELECT id, name, image FROM products WHERE stock <= 0 ORDER BY id ASC")
+    out_of_stock_products = cursor.fetchall()
+
+    sales_rows = cursor.execute(
+        """
+        SELECT DATE(created_at) AS order_day, COALESCE(SUM(quantity), 0)
+        FROM orders
+        WHERE DATE(created_at) >= DATE('now', '-29 days')
+          AND status NOT IN ('Rejected', 'Cancelled')
+        GROUP BY DATE(created_at)
+        ORDER BY order_day ASC
+        """
+    ).fetchall()
+
+    sales_by_day = {row[0]: row[1] for row in sales_rows if row[0]}
+    sales_labels = []
+    sales_values = []
+    for day_offset in range(29, -1, -1):
+        current_day = (datetime.now() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+        sales_labels.append(current_day)
+        sales_values.append(sales_by_day.get(current_day, 0))
+
+    top_products = cursor.execute(
+        """
+        SELECT products.name, COALESCE(SUM(orders.quantity), 0) AS sold_quantity
+        FROM orders
+        JOIN products ON orders.product_id = products.id
+        WHERE DATE(orders.created_at) >= DATE('now', '-29 days')
+          AND orders.status NOT IN ('Rejected', 'Cancelled')
+        GROUP BY orders.product_id, products.name
+        ORDER BY sold_quantity DESC
+        LIMIT 5
+        """
+    ).fetchall()
+
     conn.close()
 
     return render_template(
@@ -122,7 +167,13 @@ def dashboard():
         role=session['role'],
         total_products=total_products,
         total_orders=total_orders,
-        total_stock=total_stock
+        total_stock=total_stock,
+        total_delivered=total_delivered,
+        out_of_stock_products=out_of_stock_products,
+        sales_labels=sales_labels,
+        sales_values=sales_values,
+        top_product_labels=[row[0] for row in top_products],
+        top_product_values=[row[1] for row in top_products]
     )
 
 @app.route('/products')
@@ -287,8 +338,8 @@ def order(product_id):
         cursor.execute("UPDATE products SET stock=? WHERE id=?", (updated_stock, product_id))
 
         cursor.execute("""
-            INSERT INTO orders (username, product_id, quantity, status, estimated_delivery, payment_status)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (username, product_id, quantity, status, estimated_delivery, payment_status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (session['username'], product_id, quantity, "Pending", estimated_date, "Unpaid"))
 
         conn.commit()
