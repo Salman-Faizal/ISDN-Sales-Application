@@ -68,6 +68,8 @@ init_db()
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
+    error_message = None
+
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -90,9 +92,9 @@ def login():
             else:
                 return redirect(url_for('dashboard'))
         else:
-            return "Invalid Credentials"
+            error_message = "Username or password is incorrect."
 
-    return render_template("login.html")
+    return render_template("login.html", error_message=error_message)
 
 
 @app.route('/dashboard')
@@ -242,10 +244,28 @@ def order(product_id):
     if 'username' not in session or session['role'] != "Customer":
         return redirect(url_for('login'))
 
+    if quantity <= 0:
+            return "Quantity must be greater than zero"
+
     if request.method == 'POST':
         quantity = int(request.form['quantity'])
 
         estimated_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+
+        cursor.execute("SELECT stock FROM products WHERE id=?", (product_id,))
+        product = cursor.fetchone()
+
+        if not product:
+            conn.close()
+            return "Product not found"
+
+        available_stock = product[0]
+        if available_stock < quantity:
+            conn.close()
+            return "Insufficient stock"
+
+        updated_stock = available_stock - quantity
+        cursor.execute("UPDATE products SET stock=? WHERE id=?", (updated_stock, product_id))
 
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
@@ -308,19 +328,11 @@ def update_order(order_id, status):
 
         if status == "Approved" and current_status == "Pending":
 
-            cursor.execute("SELECT stock FROM products WHERE id=?", (product_id,))
-            stock = cursor.fetchone()[0]
-
-            if stock >= quantity:
-                new_stock = stock - quantity
-                cursor.execute("UPDATE products SET stock=? WHERE id=?", (new_stock, product_id))
-                cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Approved", order_id))
-            else:
-                conn.close()
-                return "Insufficient stock"
+            cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Approved", order_id))
 
         elif status == "Rejected" and current_status == "Pending":
             cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Rejected", order_id))
+            cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (quantity, product_id))
 
     # STAFF
     elif role == "Staff":
@@ -338,6 +350,37 @@ def update_order(order_id, status):
     conn.close()
 
     return redirect(url_for('view_orders'))
+
+@app.route('/cancel_order/<int:order_id>')
+def cancel_order(order_id):
+    if 'username' not in session or session['role'] != "Customer":
+        return redirect(url_for('login'))
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT username, product_id, quantity, status FROM orders WHERE id=?",
+        (order_id,)
+    )
+    order = cursor.fetchone()
+
+    if not order:
+        conn.close()
+        return redirect(url_for('products'))
+
+    order_username, product_id, quantity, status = order
+    if order_username != session['username']:
+        conn.close()
+        return redirect(url_for('products'))
+
+    if status == "Pending":
+        cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Cancelled", order_id))
+        cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (quantity, product_id))
+        conn.commit()
+
+    conn.close()
+    return redirect(url_for('products'))
 
 @app.route('/pay/<int:order_id>')
 def pay_order(order_id):
