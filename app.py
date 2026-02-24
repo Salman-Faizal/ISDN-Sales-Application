@@ -217,9 +217,31 @@ def add_product():
 
     if request.method == 'POST':
         name = request.form['name']
-        price = request.form['price']
         stock = request.form['stock']
-        image = request.files['image']
+        image = request.files.get('image')
+
+        try:
+            price = float(request.form['price'])
+        except (TypeError, ValueError):
+            return render_template(
+                "add_product.html",
+                error_message="Please enter a valid price.",
+                form_data=request.form
+            )
+
+        if price <= 0:
+            return render_template(
+                "add_product.html",
+                error_message="Price must be greater than zero.",
+                form_data=request.form
+            )
+
+        if not image or image.filename == "":
+            return render_template(
+                "add_product.html",
+                error_message="Please upload a product image.",
+                form_data=request.form
+            )
 
         filename = secure_filename(image.filename)
         image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
@@ -236,7 +258,7 @@ def add_product():
 
         return redirect(url_for('products'))
 
-    return render_template("add_product.html")
+    return render_template("add_product.html", error_message=None, form_data={})
 
 @app.route('/delete_product/<int:product_id>')
 def delete_product(product_id):
@@ -271,8 +293,31 @@ def edit_product(product_id):
 
     if request.method == 'POST':
         name = request.form['name']
-        price = request.form['price']
         stock = request.form['stock']
+
+        try:
+            price = float(request.form['price'])
+        except (TypeError, ValueError):
+            cursor.execute("SELECT * FROM products WHERE id=?", (product_id,))
+            product = cursor.fetchone()
+            conn.close()
+            return render_template(
+                "edit_product.html",
+                product=product,
+                error_message="Please enter a valid price.",
+                form_data=request.form
+            )
+
+        if price <= 0:
+            cursor.execute("SELECT * FROM products WHERE id=?", (product_id,))
+            product = cursor.fetchone()
+            conn.close()
+            return render_template(
+                "edit_product.html",
+                product=product,
+                error_message="Price must be greater than zero.",
+                form_data=request.form
+            )
 
         cursor.execute("""
             UPDATE products
@@ -288,7 +333,7 @@ def edit_product(product_id):
     product = cursor.fetchone()
     conn.close()
 
-    return render_template("edit_product.html", product=product)
+    return render_template("edit_product.html", product=product, error_message=None, form_data={})
 
 @app.route('/order/<int:product_id>', methods=['GET', 'POST'])
 def order(product_id):

@@ -69,9 +69,12 @@
             <a
               href="/delete_product/{{ product[0] }}"
               class="btn btn-danger btn-sm"
-              onclick="
-                return confirm('Are you sure you want to delete this product?');
-              "
+              data-confirm-title="Delete Product"
+              data-confirm-message="Are you sure you want to delete this product listing? This action cannot be undone."
+              data-confirm-icon="bi-x-octagon-fill"
+              data-confirm-button="Yes, Delete Product"
+              data-confirm-button-class="btn-danger"
+              data-confirm-class="js-confirm-action"
             >
               Delete
             </a>
@@ -146,9 +149,12 @@
             <a
               href="/cancel_order/{{ order[0] }}"
               class="btn btn-outline-danger btn-sm"
-              onclick="
-                return confirm('Are you sure you want to cancel this order?');
-              "
+              data-confirm-title="Cancel Order"
+              data-confirm-message="Are you sure you want to cancel this order?"
+              data-confirm-icon="bi-exclamation-triangle-fill"
+              data-confirm-button="Yes, Cancel Order"
+              data-confirm-button-class="btn-danger"
+              data-confirm-class="js-confirm-action"
             >
               Cancel Order
             </a>
@@ -166,4 +172,95 @@
     </table>
   </div>
 </div>
-{% endif %} {% endblock %}
+{% endif %}
+
+<div
+  id="confirmPopup"
+  class="position-fixed top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center"
+  style="background: rgba(15, 23, 42, 0.55); z-index: 1080"
+>
+  <div class="card shadow border-0" style="max-width: 430px; width: 92%">
+    <div class="card-body p-4 text-center">
+      <div class="mb-3">
+        <i
+          id="confirmPopupIcon"
+          class="bi bi-exclamation-triangle-fill text-danger fs-1"
+        ></i>
+      </div>
+      <h5 id="confirmPopupTitle" class="mb-2">Confirm Action</h5>
+      <p id="confirmPopupMessage" class="text-muted mb-4"></p>
+      <div class="d-flex gap-2 justify-content-center">
+        <button
+          id="confirmPopupCancel"
+          type="button"
+          class="btn btn-outline-secondary"
+        >
+          Keep Product
+        </button>
+        <button id="confirmPopupOk" type="button" class="btn btn-danger">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const popup = document.getElementById("confirmPopup");
+    if (!popup) return;
+
+    const title = document.getElementById("confirmPopupTitle");
+    const message = document.getElementById("confirmPopupMessage");
+    const icon = document.getElementById("confirmPopupIcon");
+    const cancelBtn = document.getElementById("confirmPopupCancel");
+    const okBtn = document.getElementById("confirmPopupOk");
+    let pendingUrl = null;
+
+    const hidePopup = () => {
+      popup.classList.add("d-none");
+      popup.classList.remove("d-flex");
+      pendingUrl = null;
+    };
+
+    document
+      .querySelectorAll('[data-confirm-class="js-confirm-action"]')
+      .forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          pendingUrl = link.getAttribute("href");
+
+          title.textContent = link.dataset.confirmTitle || "Confirm Action";
+          message.textContent =
+            link.dataset.confirmMessage || "Are you sure you want to continue?";
+          icon.className = `bi ${link.dataset.confirmIcon || "bi-exclamation-triangle-fill"} text-danger fs-1`;
+          okBtn.textContent = link.dataset.confirmButton || "Confirm";
+          okBtn.className = `btn ${link.dataset.confirmButtonClass || "btn-danger"}`;
+
+          cancelBtn.textContent = pendingUrl.includes("delete_product")
+            ? "Keep Product"
+            : "Keep Order";
+
+          popup.classList.remove("d-none");
+          popup.classList.add("d-flex");
+        });
+      });
+
+    cancelBtn.addEventListener("click", hidePopup);
+    popup.addEventListener("click", (event) => {
+      if (event.target === popup) hidePopup();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !popup.classList.contains("d-none")) {
+        hidePopup();
+      }
+    });
+
+    okBtn.addEventListener("click", () => {
+      if (pendingUrl) {
+        window.location.href = pendingUrl;
+      }
+    });
+  })();
+</script>
+{% endblock %}
