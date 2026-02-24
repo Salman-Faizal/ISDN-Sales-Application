@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h3>Welcome, {{ username }}</h3>
+<p class="text-muted">Role: {{ role }}</p>
+
+<div class="row mt-4">
+
+    <div class="col-md-4">
+        <div class="card shadow p-4 text-center bg-white">
+            <h6>Total Products</h6>
+            <h2>{{ total_products }}</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow p-4 text-center bg-white">
+            <h6>Total Orders</h6>
+            <h2>{{ total_orders }}</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow p-4 text-center bg-white">
+            <h6>Total Stock</h6>
+            <h2>{{ total_stock }}</h2>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
