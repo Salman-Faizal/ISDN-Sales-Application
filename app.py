@@ -201,9 +201,17 @@ def products():
     # If customer, get their orders
     if session['role'] == "Customer":
         cursor.execute("""
-            SELECT id, status, payment_status
+            SELECT
+                orders.id,
+                orders.status,
+                orders.payment_status,
+                COALESCE(products.name, 'Product Unavailable') AS product_name,
+                orders.quantity,
+                (orders.quantity * COALESCE(products.price, 0)) AS total_amount
             FROM orders
+            LEFT JOIN products ON orders.product_id = products.id
             WHERE username=?
+            ORDER BY orders.id DESC
         """, (session['username'],))
         customer_orders = cursor.fetchall()
 

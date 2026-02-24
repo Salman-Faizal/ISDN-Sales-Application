@@ -125,6 +125,9 @@
       <thead class="table-light">
         <tr>
           <th>Order ID</th>
+          <th>Order Item</th>
+          <th>Quantity</th>
+          <th>Total Amount</th>
           <th>Status</th>
           <th>Payment</th>
           <th>Action</th>
@@ -135,6 +138,9 @@
         '')|lower %} {% set payment_value = (order[2] or '')|lower %}
         <tr>
           <td>{{ order[0] }}</td>
+          <td>{{ order[3] }}</td>
+          <td>{{ order[4] }}</td>
+          <td>${{ '%.2f'|format(order[5] or 0) }}</td>
 
           <!-- STATUS -->
           <td>
