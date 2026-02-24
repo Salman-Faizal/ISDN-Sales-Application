@@ -422,16 +422,20 @@ def view_orders():
 
     return render_template("orders.html", orders=orders)
 
-@app.route('/update_order/<int:order_id>/<status>')
-def update_order(order_id, status):
-    if 'username' not in session:
+@app.route('/update_order/<int:order_id>', methods=['POST'])
+def update_order(order_id):
+    if 'username' not in session or session['role'] not in ["Admin", "Staff"]:
         return redirect(url_for('login'))
+
+    status = request.form.get('status', '').strip()
+    if not status:
+        return redirect(url_for('view_orders'))
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT product_id, quantity, status, payment_status FROM orders WHERE id=?",
+        "SELECT product_id, quantity, status FROM orders WHERE id=?",
         (order_id,)
     )
     order = cursor.fetchone()
@@ -440,31 +444,25 @@ def update_order(order_id, status):
         conn.close()
         return redirect(url_for('view_orders'))
 
-    product_id, quantity, current_status, payment_status = order
+    product_id, quantity, current_status = order
     role = session['role']
 
-    # ADMIN
-    if role == "Admin":
+    allowed_status_updates = {
+        "Admin": {
+            "Pending": ["Approved", "Rejected"]
+        },
+        "Staff": {
+            "Approved": ["Processing"],
+            "Processing": ["Shipped"],
+            "Shipped": ["Delivered"]
+        }
+    }
 
-        if status == "Approved" and current_status == "Pending":
+    if status in allowed_status_updates.get(role, {}).get(current_status, []):
+        cursor.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
 
-            cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Approved", order_id))
-
-        elif status == "Rejected" and current_status == "Pending":
-            cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Rejected", order_id))
+        if role == "Admin" and status == "Rejected":
             cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (quantity, product_id))
-
-    # STAFF
-    elif role == "Staff":
-
-        if status == "Processing" and current_status == "Approved":
-            cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Processing", order_id))
-
-        elif status == "Shipped" and current_status == "Processing":
-            cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Shipped", order_id))
-
-        elif status == "Delivered" and current_status == "Shipped":
-            cursor.execute("UPDATE orders SET status=? WHERE id=?", ("Delivered", order_id))
 
     conn.commit()
     conn.close()

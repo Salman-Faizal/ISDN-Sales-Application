@@ -1,56 +1,57 @@
-{% extends "base.html" %}
-
-{% block content %}
+{% extends "base.html" %} {% block content %}
 
 <h3>Orders</h3>
 
 <div class="card shadow p-3 bg-white">
-<table class="table table-hover align-middle">
+  <table class="table table-hover align-middle">
     <thead>
-        <tr>
-            <th>ID</th>
-            <th>Customer</th>
-            <th>Product</th>
-            <th>Qty</th>
-            <th>Status</th>
-            <th>Delivery</th>
-            <th>Payment</th>
-            <th>Action</th>
-        </tr>
+      <tr>
+        <th>ID</th>
+        <th>Customer</th>
+        <th>Product</th>
+        <th>Qty</th>
+        <th>Status</th>
+        <th>Delivery</th>
+        <th>Payment</th>
+        <th>Change Status</th>
+      </tr>
     </thead>
     <tbody>
-    {% for order in orders %}
-        <tr>
-            <td>{{ order[0] }}</td>
-            <td>{{ order[1] }}</td>
-            <td>{{ order[2] }}</td>
-            <td>{{ order[3] }}</td>
-            <td>{{ order[4] }}</td>
-            <td>{{ order[5] }}</td>
-            <td>{{ order[6] }}</td>
+      {% for order in orders %}
+      <tr>
+        <td>{{ order[0] }}</td>
+        <td>{{ order[1] }}</td>
+        <td>{{ order[2] }}</td>
+        <td>{{ order[3] }}</td>
+        <td>{{ order[4] }}</td>
+        <td>{{ order[5] }}</td>
+        <td>{{ order[6] }}</td>
 
-            <td>
-
-                {% if session['role'] == "Admin" and order[4] == "Pending" %}
-                    <a href="/update_order/{{ order[0] }}/Approved" class="btn btn-success btn-sm">Approve</a>
-                    <a href="/update_order/{{ order[0] }}/Rejected" class="btn btn-danger btn-sm">Reject</a>
-                {% endif %}
-
-                {% if session['role'] == "Staff" %}
-                    {% if order[4] == "Approved" %}
-                        <a href="/update_order/{{ order[0] }}/Processing" class="btn btn-primary btn-sm">Processing</a>
-                    {% elif order[4] == "Processing" %}
-                        <a href="/update_order/{{ order[0] }}/Shipped" class="btn btn-warning btn-sm">Shipped</a>
-                    {% elif order[4] == "Shipped" %}
-                        <a href="/update_order/{{ order[0] }}/Delivered" class="btn btn-success btn-sm">Delivered</a>
-                    {% endif %}
-                {% endif %}
-
-            </td>
-        </tr>
-    {% endfor %}
+        <td>
+          <form action="{{ url_for('update_order', order_id=order[0]) }}" method="post" class="d-flex gap-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">Select</option>
+                        {% if session['role'] == "Admin" and order[4] == "Pending" %}
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                        {% elif session['role'] == "Staff" and order[4] == "Approved" %}
+                            <option value="Processing">Processing</option>
+                        {% elif session['role'] == "Staff" and order[4] == "Processing" %}
+                            <option value="Shipped">Shipped</option>
+                        {% elif session['role'] == "Staff" and order[4] == "Shipped" %}
+                            <option value="Delivered">Delivered</option>
+                        {% endif %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-primary"
+                        {% if (session['role'] == "Admin" and order[4] != "Pending") or (session['role'] == "Staff" and order[4] not in ["Approved", "Processing", "Shipped"]) %}disabled{% endif %}>
+                        Update
+                    </button>
+                </form>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
 </div>
 
 {% endblock %}
