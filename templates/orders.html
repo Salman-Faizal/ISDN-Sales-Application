@@ -2,6 +2,24 @@
 
 <h3>Orders</h3>
 
+<form method="get" action="{{ url_for('view_orders') }}" class="row g-2 mb-3">
+  <div class="col-sm-6 col-md-4">
+    <input
+      type="text"
+      name="order_id"
+      class="form-control"
+      placeholder="Search by Order ID"
+      value="{{ order_search or '' }}"
+    />
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary">Search</button>
+    <a href="{{ url_for('view_orders') }}" class="btn btn-outline-secondary"
+      >Clear</a
+    >
+  </div>
+</form>
+
 <div class="card shadow p-3 bg-white">
   <table class="table table-hover align-middle">
     <thead>
@@ -17,36 +35,68 @@
       </tr>
     </thead>
     <tbody>
-      {% for order in orders %}
+      {% for order in orders %} {% set status_value = (order[4] or '')|lower %}
+      {% set payment_value = (order[6] or '')|lower %} {% set is_locked =
+      status_value in ['rejected', 'cancelled'] or payment_value == 'unpaid' %}
       <tr>
         <td>{{ order[0] }}</td>
         <td>{{ order[1] }}</td>
         <td>{{ order[2] }}</td>
         <td>{{ order[3] }}</td>
-        <td>{{ order[4] }}</td>
+        <td>{{ status_value|replace('_', ' ')|title }}</td>
         <td>{{ order[5] }}</td>
-        <td>{{ order[6] }}</td>
+        <td>{{ payment_value|title }}</td>
 
         <td>
-          <form action="{{ url_for('update_order', order_id=order[0]) }}" method="post" class="d-flex gap-2">
-                    <select name="status" class="form-select form-select-sm">
-                        <option value="">Select</option>
-                        {% if session['role'] == "Admin" and order[4] == "Pending" %}
-                            <option value="Approved">Approved</option>
-                            <option value="Rejected">Rejected</option>
-                        {% elif session['role'] == "Staff" and order[4] == "Approved" %}
-                            <option value="Processing">Processing</option>
-                        {% elif session['role'] == "Staff" and order[4] == "Processing" %}
-                            <option value="Shipped">Shipped</option>
-                        {% elif session['role'] == "Staff" and order[4] == "Shipped" %}
-                            <option value="Delivered">Delivered</option>
-                        {% endif %}
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-primary"
-                        {% if (session['role'] == "Admin" and order[4] != "Pending") or (session['role'] == "Staff" and order[4] not in ["Approved", "Processing", "Shipped"]) %}disabled{% endif %}>
-                        Update
-                    </button>
-                </form>
+          <form
+            action="{{ url_for('update_order', order_id=order[0]) }}"
+            method="post"
+            class="d-flex gap-2"
+          >
+            <select
+              name="status"
+              class="form-select form-select-sm {% if is_locked %}bg-light text-muted{% endif %}"
+              {%
+              if
+              is_locked
+              %}disabled{%
+              endif
+              %}
+            >
+              {% for option in ['pending', 'confirmed', 'rejected',
+              'processing', 'out_for_delivery', 'delivered', 'cancelled'] %}
+              <option
+                value="{{ option }}"
+                {%
+                if
+                option=""
+                ="status_value"
+                %}selected{%
+                endif
+                %}
+              >
+                {{ option|replace('_', ' ')|title }}
+              </option>
+              {% endfor %}
+            </select>
+            <button
+              type="submit"
+              class="btn btn-sm btn-primary"
+              {%
+              if
+              is_locked
+              %}disabled{%
+              endif
+              %}
+            >
+              Update
+            </button>
+          </form>
+          {% if is_locked %}
+          <small class="text-muted d-block mt-1"
+            >Updates unavailable for rejected/cancelled or unpaid orders.</small
+          >
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

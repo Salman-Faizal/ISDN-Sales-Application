@@ -184,8 +184,16 @@ def products():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    # Get products
-    cursor.execute("SELECT * FROM products")
+    product_search = request.args.get('product_name', '').strip()
+
+    if session['role'] == "Customer" and product_search:
+        cursor.execute(
+            "SELECT * FROM products WHERE LOWER(name) LIKE ?",
+            (f"%{product_search.lower()}%",)
+        )
+    else:
+        cursor.execute("SELECT * FROM products")
+
     products = cursor.fetchall()
 
     customer_orders = []
@@ -205,7 +213,8 @@ def products():
         "products.html",
         products=products,
         role=session['role'],
-        customer_orders=customer_orders
+        customer_orders=customer_orders,
+        product_search=product_search
     )
 
 
@@ -409,18 +418,29 @@ def view_orders():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("""
+    order_search = request.args.get('order_id', '').strip()
+    query = """
         SELECT orders.id, orders.username, products.name,
                orders.quantity, orders.status,
                orders.estimated_delivery, orders.payment_status
         FROM orders
         JOIN products ON orders.product_id = products.id
-    """)
+    """
+    params = []
+
+    if order_search:
+        if order_search.isdigit():
+            query += " WHERE orders.id = ?"
+            params.append(int(order_search))
+        else:
+            query += " WHERE 1 = 0"
+
+    cursor.execute(query, params)
 
     orders = cursor.fetchall()
     conn.close()
 
-    return render_template("orders.html", orders=orders)
+    return render_template("orders.html", orders=orders, order_search=order_search)
 
 @app.route('/update_order/<int:order_id>', methods=['POST'])
 def update_order(order_id):

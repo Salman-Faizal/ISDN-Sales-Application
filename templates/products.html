@@ -8,6 +8,26 @@
   {% endif %}
 </div>
 
+{% if role == "Customer" %}
+<form method="get" action="{{ url_for('products') }}" class="row g-2 mb-3">
+  <div class="col-sm-8 col-md-5">
+    <input
+      type="text"
+      name="product_name"
+      class="form-control"
+      placeholder="Search product by name"
+      value="{{ product_search or '' }}"
+    />
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-primary">Search</button>
+    <a href="{{ url_for('products') }}" class="btn btn-outline-secondary"
+      >Clear</a
+    >
+  </div>
+</form>
+{% endif %}
+
 <!-- PRODUCTS TABLE -->
 <div class="card shadow-sm p-3 bg-white rounded-3">
   <div class="table-responsive">
@@ -111,23 +131,24 @@
         </tr>
       </thead>
       <tbody>
-        {% for order in customer_orders %}
+        {% for order in customer_orders %} {% set status_value = (order[1] or
+        '')|lower %} {% set payment_value = (order[2] or '')|lower %}
         <tr>
           <td>{{ order[0] }}</td>
 
           <!-- STATUS -->
           <td>
-            {% if order[1] == "Delivered" %}
+            {% if status_value == "delivered" %}
             <span class="badge bg-success">Delivered</span>
-            {% elif order[1] == "Shipped" %}
-            <span class="badge bg-primary">Shipped</span>
-            {% elif order[1] == "Processing" %}
+            {% elif status_value == "out_for_delivery" %}
+            <span class="badge bg-primary">Out For Delivery</span>
+            {% elif status_value == "processing" %}
             <span class="badge bg-info text-dark">Processing</span>
-            {% elif order[1] == "Approved" %}
-            <span class="badge bg-secondary">Approved</span>
-            {% elif order[1] == "Rejected" %}
+            {% elif status_value == "confirmed" %}
+            <span class="badge bg-secondary">Confirmed</span>
+            {% elif status_value == "rejected" %}
             <span class="badge bg-danger">Rejected</span>
-            {% elif order[1] == "Cancelled" %}
+            {% elif status_value == "cancelled" %}
             <span class="badge bg-dark">Cancelled</span>
             {% else %}
             <span class="badge bg-warning text-dark">Pending</span>
@@ -136,7 +157,7 @@
 
           <!-- PAYMENT -->
           <td>
-            {% if order[2] == "Paid" %}
+            {% if payment_value == "paid" %}
             <span class="badge bg-success">Paid</span>
             {% else %}
             <span class="badge bg-danger">Unpaid</span>
@@ -158,7 +179,7 @@
             >
               Cancel Order
             </a>
-            {% elif order[2] == "Unpaid" %}
+            {% elif payment_value == "unpaid" %}
             <a href="/pay/{{ order[0] }}" class="btn btn-warning btn-sm">
               Pay Now
             </a>
