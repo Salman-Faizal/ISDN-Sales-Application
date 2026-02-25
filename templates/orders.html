@@ -31,22 +31,97 @@
         <th>Status</th>
         <th>Delivery</th>
         <th>Payment</th>
+        <th>Payment Actions</th>
         <th>Change Status</th>
       </tr>
     </thead>
     <tbody>
       {% for order in orders %} {% set status_value = (order[4] or '')|lower %}
-      {% set payment_value = (order[6] or '')|lower %} {% set is_locked =
-      status_value in ['rejected', 'cancelled'] or payment_value == 'unpaid' %}
+      {% set payment_value = (order[6] or '')|lower %} {% set payment_processed
+      = payment_value in ['paid', 'failed'] %} {% set staff_locked = (role ==
+      'Staff' and (status_value == 'cancelled' or payment_value != 'paid')) %}
       <tr>
         <td>{{ order[0] }}</td>
         <td>{{ order[1] }}</td>
         <td>{{ order[2] }}</td>
         <td>{{ order[3] }}</td>
-        <td>{{ status_value|replace('_', ' ')|title }}</td>
+        <td>
+          {% if status_value == 'cancelled' %}
+          <span class="badge bg-danger">Cancelled</span>
+          {% elif status_value == 'confirmed' %}
+          <span class="badge bg-secondary">Confirmed</span>
+          {% elif status_value == 'processing' %}
+          <span class="badge bg-info text-dark">Processing</span>
+          {% elif status_value == 'delivered' %}
+          <span class="badge bg-success">Delivered</span>
+          {% else %}
+          <span class="badge bg-warning text-dark">Pending</span>
+          {% endif %} {% if order[8] %}
+          <small class="d-block text-danger mt-1">{{ order[8] }}</small>
+          {% endif %}
+        </td>
         <td>{{ order[5] }}</td>
-        <td>{{ payment_value|title }}</td>
 
+        <td>
+          {% if payment_value == 'paid' %}<span class="badge bg-success"
+            >Paid</span
+          >
+          {% elif payment_value == 'pending' %}<span class="badge bg-primary"
+            >Pending</span
+          >
+          {% elif payment_value == 'failed' %}<span class="badge bg-danger"
+            >Failed</span
+          >
+          {% else %}<span class="badge bg-dark">Unpaid</span>{% endif %}
+        </td>
+        <td>
+          {% if role == 'Admin' and payment_value == 'pending' %}
+          <div class="d-flex gap-1 flex-wrap">
+            {% if order[7] %}
+            <a
+              href="/admin/orders/{{ order[0] }}/payment-proof"
+              target="_blank"
+              class="btn btn-sm btn-outline-primary"
+              >View Payment Proof</a
+            >
+            {% endif %}
+            <button
+              type="button"
+              class="btn btn-sm btn-success js-payment-action {% if payment_processed %}disabled{% endif %}"
+              data-order-id="{{ order[0] }}"
+              data-action="approve"
+              {%
+              if
+              payment_processed
+              %}disabled
+              style="cursor: not-allowed"
+              {%
+              endif
+              %}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-danger js-payment-action {% if payment_processed %}disabled{% endif %}"
+              data-order-id="{{ order[0] }}"
+              data-action="reject"
+              {%
+              if
+              payment_processed
+              %}disabled
+              style="cursor: not-allowed"
+              {%
+              endif
+              %}
+            >
+              Reject
+            </button>
+          </div>
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
         <td>
           <form
             action="{{ url_for('update_order', order_id=order[0]) }}"
@@ -55,22 +130,22 @@
           >
             <select
               name="status"
-              class="form-select form-select-sm {% if is_locked %}bg-light text-muted{% endif %}"
+              class="form-select form-select-sm {% if staff_locked %}bg-light text-muted{% endif %}"
               {%
               if
-              is_locked
+              staff_locked
               %}disabled{%
               endif
               %}
             >
-              {% for option in ['pending', 'confirmed', 'rejected',
-              'processing', 'out_for_delivery', 'delivered', 'cancelled'] %}
-              <!-- prettier-ignore -->
+              {% for option in ['pending', 'confirmed', 'processing',
+              'delivered', 'cancelled'] %}
               <option
                 value="{{ option }}"
                 {%
                 if
-                option == status_value
+                option=""
+                ="status_value"
                 %}selected{%
                 endif
                 %}
@@ -84,7 +159,7 @@
               class="btn btn-sm btn-primary"
               {%
               if
-              is_locked
+              staff_locked
               %}disabled{%
               endif
               %}
@@ -92,9 +167,9 @@
               Update
             </button>
           </form>
-          {% if is_locked %}
+          {% if staff_locked %}
           <small class="text-muted d-block mt-1"
-            >Updates unavailable for rejected/cancelled or unpaid orders.</small
+            >Staff cannot update cancelled/unpaid orders.</small
           >
           {% endif %}
         </td>
@@ -103,5 +178,121 @@
     </tbody>
   </table>
 </div>
+
+<div
+  id="paymentActionModal"
+  class="position-fixed top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center"
+  style="background: rgba(15, 23, 42, 0.55); z-index: 1080"
+>
+  <div class="card shadow border-0" style="max-width: 460px; width: 92%">
+    <div class="card-body p-4 text-center">
+      <h5 id="paymentActionTitle" class="mb-2">Confirm Payment Decision</h5>
+      <p id="paymentActionMessage" class="text-muted mb-3">
+        Are you sure you want to continue?
+      </p>
+      <textarea
+        id="paymentRejectReason"
+        class="form-control mb-3 d-none"
+        rows="3"
+        placeholder="Reason for rejection"
+      ></textarea>
+      <div id="paymentActionError" class="small text-danger mb-2"></div>
+      <div class="d-flex gap-2 justify-content-center">
+        <button
+          id="paymentActionCancel"
+          type="button"
+          class="btn btn-outline-secondary"
+        >
+          Cancel
+        </button>
+        <button id="paymentActionConfirm" type="button" class="btn btn-danger">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    const modal = document.getElementById("paymentActionModal");
+    const title = document.getElementById("paymentActionTitle");
+    const message = document.getElementById("paymentActionMessage");
+    const rejectReason = document.getElementById("paymentRejectReason");
+    const errorBox = document.getElementById("paymentActionError");
+    const cancelBtn = document.getElementById("paymentActionCancel");
+    const confirmBtn = document.getElementById("paymentActionConfirm");
+
+    let currentAction = null;
+    let currentOrderId = null;
+    let currentButtons = [];
+
+    document.querySelectorAll(".js-payment-action").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentAction = button.dataset.action;
+        currentOrderId = button.dataset.orderId;
+        currentButtons = Array.from(
+          button.parentElement.querySelectorAll("button"),
+        );
+        rejectReason.value = "";
+        errorBox.textContent = "";
+
+        const isApprove = currentAction === "approve";
+        title.textContent = isApprove ? "Approve Payment" : "Reject Payment";
+        message.textContent = `Are you sure you want to ${currentAction} this payment?`;
+        rejectReason.classList.toggle("d-none", isApprove);
+        confirmBtn.className = `btn ${isApprove ? "btn-success" : "btn-danger"}`;
+
+        modal.classList.remove("d-none");
+        modal.classList.add("d-flex");
+      });
+    });
+
+    cancelBtn.addEventListener("click", () => {
+      modal.classList.add("d-none");
+      modal.classList.remove("d-flex");
+    });
+
+    confirmBtn.addEventListener("click", async () => {
+      if (!currentAction || !currentOrderId) return;
+
+      const endpoint = `/admin/orders/${currentOrderId}/${currentAction}-payment`;
+      const payload = {};
+      if (currentAction === "reject")
+        payload.reason = rejectReason.value.trim();
+
+      confirmBtn.disabled = true;
+      errorBox.textContent = "";
+
+      try {
+        const response = await fetch(endpoint, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          errorBox.textContent =
+            data.error || "Unable to process payment action.";
+          return;
+        }
+
+        currentButtons.forEach((btn) => {
+          btn.disabled = true;
+          btn.classList.remove("btn-success", "btn-danger");
+          btn.classList.add("btn-secondary");
+          btn.style.cursor = "not-allowed";
+        });
+
+        window.location.reload();
+      } catch (error) {
+        errorBox.textContent = "Request failed. Please try again.";
+      } finally {
+        confirmBtn.disabled = false;
+      }
+    });
+  })();
+</script>
 
 {% endblock %}

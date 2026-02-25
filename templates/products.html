@@ -82,26 +82,21 @@
             <a
               href="/edit_product/{{ product[0] }}"
               class="btn btn-warning btn-sm"
+              >Edit</a
             >
-              Edit
-            </a>
-
             <a
               href="/delete_product/{{ product[0] }}"
-              class="btn btn-danger btn-sm"
+              class="btn btn-danger btn-sm js-confirm-action"
               data-confirm-title="Delete Product"
-              data-confirm-message="Are you sure you want to delete this product listing? This action cannot be undone."
-              data-confirm-icon="bi-x-octagon-fill"
+              data-confirm-message="Are you sure you want to delete this product listing?"
               data-confirm-button="Yes, Delete Product"
               data-confirm-button-class="btn-danger"
-              data-confirm-class="js-confirm-action"
+              >Delete</a
             >
-              Delete
-            </a>
             {% endif %} {% if role == "Customer" %} {% if product[3] > 0 %}
-            <a href="/order/{{ product[0] }}" class="btn btn-success btn-sm">
-              Order
-            </a>
+            <a href="/order/{{ product[0] }}" class="btn btn-success btn-sm"
+              >Order</a
+            >
             {% else %}
             <button class="btn btn-secondary btn-sm" disabled>
               Unavailable
@@ -144,51 +139,62 @@
 
           <!-- STATUS -->
           <td>
-            {% if status_value == "delivered" %}
-            <span class="badge bg-success">Delivered</span>
-            {% elif status_value == "out_for_delivery" %}
-            <span class="badge bg-primary">Out For Delivery</span>
-            {% elif status_value == "processing" %}
-            <span class="badge bg-info text-dark">Processing</span>
-            {% elif status_value == "confirmed" %}
-            <span class="badge bg-secondary">Confirmed</span>
-            {% elif status_value == "rejected" %}
-            <span class="badge bg-danger">Rejected</span>
-            {% elif status_value == "cancelled" %}
-            <span class="badge bg-dark">Cancelled</span>
-            {% else %}
-            <span class="badge bg-warning text-dark">Pending</span>
+            {% if status_value == "delivered" %}<span class="badge bg-success"
+              >Delivered</span
+            >
+            {% elif status_value == "processing" %}<span
+              class="badge bg-info text-dark"
+              >Processing</span
+            >
+            {% elif status_value == "confirmed" %}<span
+              class="badge bg-secondary"
+              >Confirmed</span
+            >
+            {% elif status_value == "cancelled" %}<span class="badge bg-danger"
+              >Cancelled</span
+            >
+            {% else %}<span class="badge bg-warning text-dark">Pending</span>{%
+            endif %} {% if order[7] %}
+            <small class="d-block text-danger mt-1">{{ order[7] }}</small>
             {% endif %}
           </td>
 
           <!-- PAYMENT -->
           <td>
-            {% if payment_value == "paid" %}
-            <span class="badge bg-success">Paid</span>
-            {% else %}
-            <span class="badge bg-danger">Unpaid</span>
-            {% endif %}
+            {% if payment_value == "paid" %}<span class="badge bg-success"
+              >Paid</span
+            >
+            {% elif payment_value == "pending" %}<span class="badge bg-primary"
+              >Pending</span
+            >
+            {% elif payment_value == "failed" %}<span class="badge bg-danger"
+              >Failed</span
+            >
+            {% else %}<span class="badge bg-dark">Unpaid</span>{% endif %}
           </td>
 
           <!-- PAYMENT ACTION -->
           <td>
-            {% if order[1] == "Pending" %}
+            {% if order[1] == "pending" and payment_value in ["unpaid",
+            "failed"] %}
             <a
               href="/cancel_order/{{ order[0] }}"
-              class="btn btn-outline-danger btn-sm"
+              class="btn btn-outline-danger btn-sm js-confirm-action"
               data-confirm-title="Cancel Order"
               data-confirm-message="Are you sure you want to cancel this order?"
-              data-confirm-icon="bi-exclamation-triangle-fill"
               data-confirm-button="Yes, Cancel Order"
               data-confirm-button-class="btn-danger"
-              data-confirm-class="js-confirm-action"
+              >Cancel</a
             >
-              Cancel Order
-            </a>
-            {% elif payment_value == "unpaid" %}
-            <a href="/pay/{{ order[0] }}" class="btn btn-warning btn-sm">
+            <button
+              type="button"
+              class="btn btn-warning btn-sm js-pay-now"
+              data-order-id="{{ order[0] }}"
+            >
               Pay Now
-            </a>
+            </button>
+            {% elif payment_value == "pending" %}
+            <span class="text-muted">Verification pending</span>
             {% else %}
             <span class="text-muted">—</span>
             {% endif %}
@@ -208,12 +214,6 @@
 >
   <div class="card shadow border-0" style="max-width: 430px; width: 92%">
     <div class="card-body p-4 text-center">
-      <div class="mb-3">
-        <i
-          id="confirmPopupIcon"
-          class="bi bi-exclamation-triangle-fill text-danger fs-1"
-        ></i>
-      </div>
       <h5 id="confirmPopupTitle" class="mb-2">Confirm Action</h5>
       <p id="confirmPopupMessage" class="text-muted mb-4"></p>
       <div class="d-flex gap-2 justify-content-center">
@@ -222,7 +222,7 @@
           type="button"
           class="btn btn-outline-secondary"
         >
-          Keep Product
+          Cancel
         </button>
         <button id="confirmPopupOk" type="button" class="btn btn-danger">
           Confirm
@@ -232,14 +232,63 @@
   </div>
 </div>
 
+<div
+  id="paymentModal"
+  class="position-fixed top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center"
+  style="background: rgba(15, 23, 42, 0.55); z-index: 1081"
+>
+  <div class="card shadow border-0" style="max-width: 470px; width: 92%">
+    <div class="card-body p-4">
+      <h5 class="mb-3">Upload Payment Slip</h5>
+      <p class="text-muted mb-3">
+        Supported formats: PNG, JPG, JPEG, PDF (max 5MB).
+      </p>
+      <input
+        id="paymentProofInput"
+        class="form-control mb-3"
+        type="file"
+        accept=".png,.jpg,.jpeg,.pdf"
+      />
+      <div id="paymentModalMessage" class="small text-danger mb-2"></div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button
+          id="paymentCancel"
+          type="button"
+          class="btn btn-outline-secondary"
+        >
+          Cancel
+        </button>
+        <button id="paymentSubmit" type="button" class="btn btn-primary">
+          Submit
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  id="paymentSuccessModal"
+  class="position-fixed top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center"
+  style="background: rgba(15, 23, 42, 0.55); z-index: 1082"
+>
+  <div class="card shadow border-0" style="max-width: 470px; width: 92%">
+    <div class="card-body p-4 text-center">
+      <h5 class="mb-2">Payment Submitted</h5>
+      <p class="text-muted">
+        Your order has been placed. Payment verification is pending. A
+        confirmation email will be sent once the payment is verified.
+      </p>
+      <button id="paymentSuccessOk" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
 <script>
   (() => {
     const popup = document.getElementById("confirmPopup");
-    if (!popup) return;
 
     const title = document.getElementById("confirmPopupTitle");
     const message = document.getElementById("confirmPopupMessage");
-    const icon = document.getElementById("confirmPopupIcon");
     const cancelBtn = document.getElementById("confirmPopupCancel");
     const okBtn = document.getElementById("confirmPopupOk");
     let pendingUrl = null;
@@ -250,44 +299,88 @@
       pendingUrl = null;
     };
 
-    document
-      .querySelectorAll('[data-confirm-class="js-confirm-action"]')
-      .forEach((link) => {
-        link.addEventListener("click", (event) => {
-          event.preventDefault();
-          pendingUrl = link.getAttribute("href");
-
-          title.textContent = link.dataset.confirmTitle || "Confirm Action";
-          message.textContent =
-            link.dataset.confirmMessage || "Are you sure you want to continue?";
-          icon.className = `bi ${link.dataset.confirmIcon || "bi-exclamation-triangle-fill"} text-danger fs-1`;
-          okBtn.textContent = link.dataset.confirmButton || "Confirm";
-          okBtn.className = `btn ${link.dataset.confirmButtonClass || "btn-danger"}`;
-
-          cancelBtn.textContent = pendingUrl.includes("delete_product")
-            ? "Keep Product"
-            : "Keep Order";
-
-          popup.classList.remove("d-none");
-          popup.classList.add("d-flex");
-        });
+    document.querySelectorAll(".js-confirm-action").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        pendingUrl = link.getAttribute("href");
+        title.textContent = link.dataset.confirmTitle || "Confirm Action";
+        message.textContent =
+          link.dataset.confirmMessage || "Are you sure you want to continue?";
+        okBtn.textContent = link.dataset.confirmButton || "Confirm";
+        okBtn.className = `btn ${link.dataset.confirmButtonClass || "btn-danger"}`;
+        popup.classList.remove("d-none");
+        popup.classList.add("d-flex");
       });
+    });
 
     cancelBtn.addEventListener("click", hidePopup);
-    popup.addEventListener("click", (event) => {
-      if (event.target === popup) hidePopup();
+    okBtn.addEventListener("click", () => {
+      if (pendingUrl) window.location.href = pendingUrl;
     });
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !popup.classList.contains("d-none")) {
-        hidePopup();
+
+    const paymentModal = document.getElementById("paymentModal");
+    const paymentInput = document.getElementById("paymentProofInput");
+    const paymentCancel = document.getElementById("paymentCancel");
+    const paymentSubmit = document.getElementById("paymentSubmit");
+    const paymentMessage = document.getElementById("paymentModalMessage");
+    const paymentSuccessModal = document.getElementById("paymentSuccessModal");
+    const paymentSuccessOk = document.getElementById("paymentSuccessOk");
+    let currentOrderId = null;
+
+    document.querySelectorAll(".js-pay-now").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentOrderId = button.dataset.orderId;
+        paymentInput.value = "";
+        paymentMessage.textContent = "";
+        paymentModal.classList.remove("d-none");
+        paymentModal.classList.add("d-flex");
+      });
+    });
+
+    paymentCancel.addEventListener("click", () => {
+      paymentModal.classList.add("d-none");
+      paymentModal.classList.remove("d-flex");
+    });
+    paymentSubmit.addEventListener("click", async () => {
+      if (!paymentInput.files.length || !currentOrderId) {
+        paymentMessage.textContent = "Please choose a file before submitting.";
+        return;
+      }
+      const formData = new FormData();
+      formData.append("payment_proof", paymentInput.files[0]);
+
+      paymentSubmit.disabled = true;
+      paymentSubmit.textContent = "Submitting...";
+      paymentMessage.textContent = "";
+
+      try {
+        const response = await fetch(
+          `/orders/${currentOrderId}/upload-payment-proof`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          paymentMessage.textContent = payload.error || "Upload failed.";
+          return;
+        }
+
+        paymentModal.classList.add("d-none");
+        paymentModal.classList.remove("d-flex");
+        paymentSuccessModal.classList.remove("d-none");
+        paymentSuccessModal.classList.add("d-flex");
+      } catch (error) {
+        paymentMessage.textContent =
+          "Unable to upload payment proof right now.";
+      } finally {
+        paymentSubmit.disabled = false;
+        paymentSubmit.textContent = "Submit";
       }
     });
 
-    okBtn.addEventListener("click", () => {
-      if (pendingUrl) {
-        window.location.href = pendingUrl;
-      }
-    });
+    paymentSuccessOk.addEventListener("click", () => window.location.reload());
   })();
 </script>
 {% endblock %}
