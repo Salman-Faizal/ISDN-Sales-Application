@@ -1,0 +1,156 @@
+{% extends "base.html" %} {% block content %}
+<h3>Welcome, {{ username }}</h3>
+<p class="text-muted">Role: {{ role }}</p>
+
+<div class="row mt-4 g-3" id="summaryCards">
+  <div class="col-md-4 col-lg">
+    <div class="card shadow-sm p-3 h-100">
+      <h6 class="text-muted">Total Orders (Today)</h6>
+      <h3 id="totalOrdersToday">-</h3>
+    </div>
+  </div>
+  <div class="col-md-4 col-lg">
+    <div class="card shadow-sm p-3 h-100">
+      <h6 class="text-muted">Orders Pending Preparation</h6>
+      <h3 id="pendingPreparation">-</h3>
+    </div>
+  </div>
+  <div class="col-md-4 col-lg">
+    <div class="card shadow-sm p-3 h-100">
+      <h6 class="text-muted">Orders Processing</h6>
+      <h3 id="processingOrders">-</h3>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg">
+    <div class="card shadow-sm p-3 h-100">
+      <h6 class="text-muted">Orders Out for Delivery</h6>
+      <h3 id="outForDelivery">-</h3>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg">
+    <div class="card shadow-sm p-3 h-100">
+      <h6 class="text-muted">Cancelled Orders</h6>
+      <h3 id="cancelledOrders">-</h3>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm p-3 mt-4">
+  <h5 class="mb-3">Inventory Low Stock Alerts</h5>
+  <div class="table-responsive">
+    <table class="table table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Current Stock</th>
+          <th>Threshold</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="lowStockTableBody">
+        <tr>
+          <td colspan="4" class="text-center text-muted">
+            Loading low stock alerts...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm p-3 mt-4">
+  <h5 class="mb-3">Notifications</h5>
+  <div id="notificationsPanel" class="list-group">
+    <div class="list-group-item text-muted">Loading recent updates...</div>
+  </div>
+</div>
+
+<script>
+  async function fetchJson(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error("Failed to load " + url);
+    }
+    return response.json();
+  }
+
+  function renderSummary(summary) {
+    document.getElementById("totalOrdersToday").textContent =
+      summary.total_orders_today;
+    document.getElementById("pendingPreparation").textContent =
+      summary.pending_preparation;
+    document.getElementById("processingOrders").textContent =
+      summary.processing;
+    document.getElementById("outForDelivery").textContent =
+      summary.out_for_delivery;
+    document.getElementById("cancelledOrders").textContent = summary.cancelled;
+  }
+
+  function renderLowStock(items) {
+    const tbody = document.getElementById("lowStockTableBody");
+
+    if (!items.length) {
+      tbody.innerHTML =
+        '<tr><td colspan="4" class="text-center text-muted">No low stock alerts.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = items
+      .map(
+        (item) => `
+      <tr>
+        <td>${item.product_name}</td>
+        <td>${item.stock}</td>
+        <td>${item.threshold}</td>
+        <td><span class="badge text-bg-danger">${item.status}</span></td>
+      </tr>
+    `,
+      )
+      .join("");
+  }
+
+  function renderNotifications(notifications) {
+    const panel = document.getElementById("notificationsPanel");
+
+    if (!notifications.length) {
+      panel.innerHTML =
+        '<div class="list-group-item text-muted">No recent updates.</div>';
+      return;
+    }
+
+    panel.innerHTML = notifications
+      .map(
+        (item) => `
+      <a href="/orders?order_id=${item.order_id}" class="list-group-item list-group-item-action">
+        <div class="d-flex w-100 justify-content-between">
+          <p class="mb-1">${item.message} <strong>#${item.order_id}</strong></p>
+          <small class="text-muted">${item.timestamp}</small>
+        </div>
+      </a>
+    `,
+      )
+      .join("");
+  }
+
+  async function loadStaffDashboard() {
+    try {
+      const [summary, lowStock, notifications] = await Promise.all([
+        fetchJson("/staff/dashboard/summary"),
+        fetchJson("/staff/dashboard/low-stock"),
+        fetchJson("/staff/dashboard/notifications"),
+      ]);
+
+      renderSummary(summary);
+      renderLowStock(lowStock);
+      renderNotifications(notifications);
+    } catch (error) {
+      document.getElementById("lowStockTableBody").innerHTML =
+        '<tr><td colspan="4" class="text-danger text-center">Unable to load low stock alerts.</td></tr>';
+      document.getElementById("notificationsPanel").innerHTML =
+        '<div class="list-group-item text-danger">Unable to load recent updates.</div>';
+    }
+  }
+
+  loadStaffDashboard();
+</script>
+{% endblock %}

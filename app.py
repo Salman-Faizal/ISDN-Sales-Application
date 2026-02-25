@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from werkzeug.utils import secure_filename
+from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = "secretkey123"
+LOW_STOCK_THRESHOLD = 10
 
 UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -72,6 +74,110 @@ def init_db():
 init_db()
 # ------------------------------------
 
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if 'username' not in session:
+            return redirect(url_for('login'))
+        return view_func(*args, **kwargs)
+    return wrapped_view
+
+
+def role_required(*allowed_roles):
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapped_view(*args, **kwargs):
+            if 'username' not in session:
+                return redirect(url_for('login'))
+            if session.get('role') not in allowed_roles:
+                if session.get('role') == 'Customer':
+                    return redirect(url_for('products'))
+                if session.get('role') == 'Staff':
+                    return redirect(url_for('staff_dashboard'))
+                return redirect(url_for('dashboard'))
+            return view_func(*args, **kwargs)
+        return wrapped_view
+    return decorator
+
+
+def get_staff_dashboard_summary(cursor):
+    return {
+        "total_orders_today": cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE DATE(created_at) = DATE('now', 'localtime')"
+        ).fetchone()[0],
+        "pending_preparation": cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='Approved'"
+        ).fetchone()[0],
+        "processing": cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='Processing'"
+        ).fetchone()[0],
+        "out_for_delivery": cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='Shipped'"
+        ).fetchone()[0],
+        "cancelled": cursor.execute(
+            "SELECT COUNT(*) FROM orders WHERE status='Cancelled'"
+        ).fetchone()[0],
+    }
+
+
+def get_staff_low_stock(cursor):
+    low_stock_rows = cursor.execute(
+        """
+        SELECT id, name, stock
+        FROM products
+        WHERE stock <= ?
+        ORDER BY stock ASC, id ASC
+        """,
+        (LOW_STOCK_THRESHOLD,)
+    ).fetchall()
+
+    return [
+        {
+            "product_id": row[0],
+            "product_name": row[1],
+            "stock": row[2],
+            "threshold": LOW_STOCK_THRESHOLD,
+            "status": "LOW",
+        }
+        for row in low_stock_rows
+    ]
+
+
+def get_staff_notifications(cursor):
+    notification_rows = cursor.execute(
+        """
+        SELECT id, status, payment_status, created_at
+        FROM orders
+        WHERE status IN ('Approved', 'Cancelled', 'Processing', 'Shipped')
+           OR payment_status = 'Paid'
+        ORDER BY datetime(created_at) DESC
+        LIMIT 10
+        """
+    ).fetchall()
+
+    notifications = []
+    for row in notification_rows:
+        order_id, status, payment_status, created_at = row
+        message = None
+        if status == 'Approved':
+            message = 'Order confirmed and ready for preparation.'
+        elif status == 'Cancelled':
+            message = 'Order was cancelled.'
+        elif status in ('Processing', 'Shipped'):
+            message = f'Order assigned for {status.lower()}.'
+        elif payment_status == 'Paid':
+            message = 'Order payment completed.'
+
+        if message:
+            notifications.append(
+                {
+                    "order_id": order_id,
+                    "message": message,
+                    "timestamp": created_at,
+                }
+            )
+
+    return notifications
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -96,6 +202,8 @@ def login():
 
             if role == "Customer":
                 return redirect(url_for('products'))
+            if role == "Staff":
+                return redirect(url_for('staff_dashboard'))
             else:
                 return redirect(url_for('dashboard'))
         else:
@@ -105,10 +213,8 @@ def login():
 
 
 @app.route('/dashboard')
+@role_required('Admin')
 def dashboard():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
@@ -175,6 +281,41 @@ def dashboard():
         top_product_labels=[row[0] for row in top_products],
         top_product_values=[row[1] for row in top_products]
     )
+
+@app.route('/staff/dashboard')
+@role_required('Staff')
+def staff_dashboard():
+    return render_template("staff_dashboard.html", username=session['username'], role=session['role'])
+
+
+@app.route('/staff/dashboard/summary')
+@role_required('Staff')
+def staff_dashboard_summary():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    summary = get_staff_dashboard_summary(cursor)
+    conn.close()
+    return jsonify(summary)
+
+
+@app.route('/staff/dashboard/low-stock')
+@role_required('Staff')
+def staff_dashboard_low_stock():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    low_stock_items = get_staff_low_stock(cursor)
+    conn.close()
+    return jsonify(low_stock_items)
+
+
+@app.route('/staff/dashboard/notifications')
+@role_required('Staff')
+def staff_dashboard_notifications():
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    notifications = get_staff_notifications(cursor)
+    conn.close()
+    return jsonify(notifications)
 
 @app.route('/products')
 def products():
