@@ -140,12 +140,12 @@
             >
               {% for option in ['pending', 'confirmed', 'processing',
               'delivered', 'cancelled'] %}
+              <!-- prettier-ignore -->
               <option
                 value="{{ option }}"
                 {%
                 if
-                option=""
-                ="status_value"
+                option == status_value
                 %}selected{%
                 endif
                 %}
