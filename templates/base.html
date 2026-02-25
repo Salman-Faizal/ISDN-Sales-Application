@@ -43,7 +43,11 @@
   <body>
     {% if session.get('username') %}
     <div class="sidebar">
-      <h4 class="text-center mt-3">Admin Panel</h4>
+      <h4 class="text-center mt-3">
+        {% if session.get('role') == "Admin" %}Admin Panel{% elif
+        session.get('role') == "Staff" %}Staff Panel{% elif session.get('role')
+        == "Customer" %}Menu{% else %}Menu{% endif %}
+      </h4>
       <hr />
 
       {% if session.get('role') == "Admin" %}

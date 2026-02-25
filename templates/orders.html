@@ -31,8 +31,11 @@
         <th>Status</th>
         <th>Delivery</th>
         <th>Payment</th>
+        {% if role == 'Admin' %}
         <th>Payment Actions</th>
+        {% endif %} {% if role == 'Staff' %}
         <th>Change Status</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -74,8 +77,9 @@
           >
           {% else %}<span class="badge bg-dark">Unpaid</span>{% endif %}
         </td>
+        {% if role == 'Admin' %}
         <td>
-          {% if role == 'Admin' and payment_value == 'pending' %}
+          {% if payment_value == 'pending' %}
           <div class="d-flex gap-1 flex-wrap">
             {% if order[7] %}
             <a
@@ -122,6 +126,7 @@
           <span class="text-muted">—</span>
           {% endif %}
         </td>
+        {% endif %} {% if role == 'Staff' %}
         <td>
           <form
             action="{{ url_for('update_order', order_id=order[0]) }}"
@@ -173,6 +178,7 @@
           >
           {% endif %}
         </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
